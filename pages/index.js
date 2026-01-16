@@ -16,37 +16,38 @@ export default function PurePopAI() {
   const MY_SONG_URL = "/music/PurePop%20AI%20Radio%20%E2%80%93%20Mainoskatko.mp3";
 
   useEffect(() => {
-    // Alustetaan AI vain selaimessa
-    const startLoader = async () => {
-      try {
-        const tf = await import('@tensorflow/tfjs');
-        const speechCommands = await import('@tensorflow-models/speech-commands');
-        await tf.ready();
-        const r = speechCommands.create("BROWSER_FFT");
-        await r.ensureModelLoaded();
-        recognizerRef.current = r;
-      } catch (e) {
-        console.error("AI Error:", e);
+    async function init() {
+      if (typeof window !== 'undefined') {
+        try {
+          const tf = await import('@tensorflow/tfjs');
+          const speechCommands = await import('@tensorflow-models/speech-commands');
+          await tf.ready();
+          const model = speechCommands.create("BROWSER_FFT");
+          await model.ensureModelLoaded();
+          recognizerRef.current = model;
+        } catch (err) {
+          console.error("AI load error", err);
+        }
       }
-    };
-    startLoader();
+    }
+    init();
   }, []);
 
-  const lerpVolume = (audioEl, target) => {
+  const changeVolume = (audio, target) => {
     if (fadeInterval.current) clearInterval(fadeInterval.current);
-    if (!audioEl) return;
+    if (!audio) return;
     fadeInterval.current = setInterval(() => {
-      const v = audioEl.volume;
-      if (v < target - 0.05) audioEl.volume += 0.05;
-      else if (v > target + 0.05) audioEl.volume -= 0.05;
+      const v = audio.volume;
+      if (v < target - 0.05) audio.volume += 0.05;
+      else if (v > target + 0.05) audio.volume -= 0.05;
       else {
-        audioEl.volume = target;
+        audio.volume = target;
         clearInterval(fadeInterval.current);
       }
     }, 50);
   };
 
-  const handleAudioLogic = (result) => {
+  const onResult = (result) => {
     const score = result.scores[1];
     setAiConfidence(Math.round(score * 100));
 
@@ -55,10 +56,10 @@ export default function PurePopAI() {
       radioRef.current.muted = true;
       localMusicRef.current.src = MY_SONG_URL;
       localMusicRef.current.play().catch(() => {});
-      lerpVolume(localMusicRef.current, 1);
+      changeVolume(localMusicRef.current, 1);
     } else if (score < 0.15 && mode === 'OMA_MUSIIKKI') {
       setMode('RADIO');
-      lerpVolume(localMusicRef.current, 0);
+      changeVolume(localMusicRef.current, 0);
       setTimeout(() => {
         localMusicRef.current.pause();
         radioRef.current.muted = false;
@@ -66,21 +67,21 @@ export default function PurePopAI() {
     }
   };
 
-  const start = async () => {
+  const toggle = async () => {
     if (isPlaying) {
-      // Stop logic
       radioRef.current.pause();
       localMusicRef.current.pause();
-      if (recognizerRef.current) recognizerRef.current.stopListening();
+      if (recognizerRef.current) {
+        recognizerRef.current.stopListening();
+      }
       setIsPlaying(false);
       setMode('RADIO');
     } else {
-      // Start logic
       try {
         await radioRef.current.play();
         setIsPlaying(true);
         if (recognizerRef.current) {
-          recognizerRef.current.listen(handleAudioLogic, {
+          recognizerRef.current.listen(onResult, {
             probabilityThreshold: 0.70,
             overlapFactor: 0.5
           });
@@ -92,28 +93,34 @@ export default function PurePopAI() {
   };
 
   return (
-    <div className="bg">
+    <div className="container">
       <Head><title>PurePOP AI</title></Head>
-      <div className="ui">
+      <div className="card">
         <h1>Pure<span>POP</span> AI</h1>
-        <div className={`box ${mode !== 'RADIO' ? 'warn' : ''}`}>
-          <div>{mode === 'RADIO' ? 'RADIO LIVE' : 'OMA BIISI'}</div>
-          <small>{isPlaying ? 'AI Valvoo...' : 'Odottaa...'}</small>
+        <div className={`status-box ${mode !== 'RADIO' ? 'active' : ''}`}>
+          <div className="mode-label">{mode === 'RADIO' ? 'RADIO' : 'MAINOSKATKO'}</div>
+          <div className="status-sub">{isPlaying ? 'AI VALVOO' : 'VALMIS'}</div>
         </div>
-        <div className="meter"><div className="bar" style={{width: aiConfidence+'%'}}></div></div>
-        <button onClick={start} className="btn">{isPlaying ? 'STOP' : 'START'}</button>
+        <div className="meter-container">
+          <div className="meter-bar" style={{ width: aiConfidence + '%' }}></div>
+        </div>
+        <button onClick={toggle} className="main-btn">
+          {isPlaying ? 'STOP' : 'START'}
+        </button>
       </div>
       <audio ref={radioRef} src={RADIO_URL} crossOrigin="anonymous" />
       <audio ref={localMusicRef} loop />
       <style jsx>{`
-        .bg { min-height:100vh; background:#000; display:flex; align-items:center; justify-content:center; color:#fff; font-family:sans-serif; }
-        .ui { background:#111; padding:40px; border-radius:30px; width:260px; text-align:center; border:1px solid #222; }
-        h1 span { color:#00ff00; }
-        .box { background:#1a1a1a; padding:20px; border-radius:20px; margin:20px 0; border:1px solid #333; }
-        .warn { border-color:#ff0000; color:#ff0000; }
-        .meter { height:4px; background:#222; margin-bottom:20px; border-radius:2px; overflow:hidden; }
-        .bar { height:100%; background:#00ff00; transition:0.3s; }
-        .btn { width:100%; padding:15px; border-radius:15px; border:none; font-weight:bold; cursor:pointer; background:#fff; }
+        .container { min-height: 100vh; background: #000; display: flex; align-items: center; justify-content: center; color: #fff; font-family: sans-serif; }
+        .card { background: #111; padding: 3rem; border-radius: 2rem; width: 300px; text-align: center; border: 1px solid #222; }
+        h1 span { color: #00ff00; }
+        .status-box { background: #1a1a1a; padding: 1.5rem; border-radius: 1rem; margin: 2rem 0; border: 1px solid #333; }
+        .active { border-color: #ff0000; color: #ff0000; }
+        .mode-label { font-weight: bold; font-size: 1.2rem; }
+        .status-sub { font-size: 0.8rem; color: #555; margin-top: 0.5rem; }
+        .meter-container { height: 4px; background: #222; margin-bottom: 2rem; border-radius: 2px; overflow: hidden; }
+        .meter-bar { height: 100%; background: #00ff00; transition: 0.3s; }
+        .main-btn { width: 100%; padding: 1rem; border-radius: 1rem; border: none; font-weight: bold; cursor: pointer; background: #fff; }
       `}</style>
     </div>
   );
